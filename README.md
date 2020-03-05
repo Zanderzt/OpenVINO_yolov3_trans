@@ -1,10 +1,5 @@
 
-## 🆕 Are you looking for a new YOLOv3 implemented by TF2.0 ?
-
->If you hate the fucking tensorflow1.x very much, no worries! I have implemented **a new YOLOv3 repo with TF2.0**, and also made a chinese blog on how to implement YOLOv3 object detector from scratch. <br>
-[code](https://github.com/YunYang1994/TensorFlow2.0-Examples/tree/master/4-Object_Detection/YOLOV3) | [blog](https://yunyang1994.github.io/posts/YOLOv3/#more)  | [issue](https://github.com/YunYang1994/tensorflow-yolov3/issues/39)
-
-This is a compare about Yunyang1994 and mystic123 from BJTU_Lab_ZaiYun
+## This is a compare about Yunyang1994 and mystic123 from BJTU_Lab_ZaiYun
 
 ## part 1. Quick start
 1. Clone this file
