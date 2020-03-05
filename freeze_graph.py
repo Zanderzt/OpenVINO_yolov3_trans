@@ -15,8 +15,11 @@
 import tensorflow as tf
 from core.yolov3 import YOLOV3
 def detections_boxes(detections, detectionm, detectionl):
-    
-    detec = tf.concat([detections,detectionm,detectionl], axis = 1,name="output_boxes")
+    num_classes = 80
+    detection_s = tf.reshape(detections, (-1, 5 + num_classes))
+    detection_m = tf.reshape(detectionm, (-1, 5 + num_classes))
+    detection_l = tf.reshape(detectionl, (-1, 5 + num_classes))
+    detec = tf.concat([detection_s,detection_m,detection_l], axis = 0,name="output_boxes")
     return detec
 
 pb_file = "./yolov3_coco.pb"
