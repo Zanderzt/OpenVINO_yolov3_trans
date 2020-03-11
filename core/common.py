@@ -1,12 +1,12 @@
 #! /usr/bin/env python
 # coding=utf-8
 #================================================================
-#   Copyright (C) 2019 * Ltd. All rights reserved.
+#   Copyright (C) 2020 * Ltd. All rights reserved.
 #
 #   Editor      : VIM
 #   File name   : common.py
-#   Author      : YunYang1994
-#   Created date: 2019-02-28 09:56:29
+#   Author      : Zander
+#   Created date: 2020-02-28 09:56:29
 #   Description :
 #
 #================================================================
