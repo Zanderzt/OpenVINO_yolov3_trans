@@ -5,8 +5,8 @@
 #
 #   Editor      : VIM
 #   File name   : yolov3.py
-#   Author      : YunYang1994
-#   Created date: 2019-02-28 10:47:03
+#   Author      : Zander
+#   Created date: 2020-02-28 10:47:03
 #   Description :
 #
 #================================================================
@@ -17,7 +17,14 @@ import core.utils as utils
 import core.common as common
 import core.backbone as backbone
 from core.config import cfg
+_ANCHORS = [(10, 13), (16, 30), (33, 23),
+            (30, 61), (62, 45), (59, 119),
+            (116, 90), (156, 198), (373, 326)]
 
+def _get_size(shape, data_format):
+    if len(shape) == 4:
+        shape = shape[1:]
+    return shape[1:3] if data_format == 'NCHW' else shape[0:2]
 
 class YOLOV3(object):
     """Implement tensoflow yolov3 here"""
@@ -31,12 +38,13 @@ class YOLOV3(object):
         self.anchor_per_scale = cfg.YOLO.ANCHOR_PER_SCALE
         self.iou_loss_thresh  = cfg.YOLO.IOU_LOSS_THRESH
         self.upsample_method  = cfg.YOLO.UPSAMPLE_METHOD
+        self.img_size         = input_data.get_shape().as_list()[1:3]
 
         try:
             self.conv_lbbox, self.conv_mbbox, self.conv_sbbox = self.__build_nework(input_data)
         except:
             raise NotImplementedError("Can not build up yolov3 network!")
-
+        '''
         with tf.variable_scope('pred_sbbox'):
             self.pred_sbbox = self.decode(self.conv_sbbox, self.anchors[0], self.strides[0])
 
@@ -45,11 +53,20 @@ class YOLOV3(object):
 
         with tf.variable_scope('pred_lbbox'):
             self.pred_lbbox = self.decode(self.conv_lbbox, self.anchors[2], self.strides[2])
+        '''
+        
+        self.pred_sbbox = self.post_pro(self.conv_sbbox, self.num_class,  _ANCHORS[0:3], self.img_size)
+        self.pred_mbbox = self.post_pro(self.conv_mbbox, self.num_class,  _ANCHORS[3:6], self.img_size)
+        self.pred_lbbox = self.post_pro(self.conv_lbbox, self.num_class,  _ANCHORS[6:9], self.img_size)
+         
+          
 
     def __build_nework(self, input_data):
-
-        # input_data = input_data / 255
+    
+        input_data = input_data / 255
         route_1, route_2, input_data = backbone.darknet53(input_data, self.trainable)
+
+        print(route_1.get_shape().as_list(), route_2.get_shape().as_list(), input_data.get_shape().as_list())
 
         input_data = common.convolutional(input_data, (1, 1, 1024,  512), self.trainable, 'conv52')
         input_data = common.convolutional(input_data, (3, 3,  512, 1024), self.trainable, 'conv53')
@@ -82,7 +99,7 @@ class YOLOV3(object):
 
         with tf.variable_scope('route_2'):
             input_data = tf.concat([input_data, route_1], axis=-1)
-
+ 
         input_data = common.convolutional(input_data, (1, 1, 384, 128), self.trainable, 'conv64')
         input_data = common.convolutional(input_data, (3, 3, 128, 256), self.trainable, 'conv65')
         input_data = common.convolutional(input_data, (1, 1, 256, 128), self.trainable, 'conv66')
@@ -92,8 +109,54 @@ class YOLOV3(object):
         conv_sobj_branch = common.convolutional(input_data, (3, 3, 128, 256), self.trainable, name='conv_sobj_branch')
         conv_sbbox = common.convolutional(conv_sobj_branch, (1, 1, 256, 3*(self.num_class + 5)),
                                           trainable=self.trainable, name='conv_sbbox', activate=False, bn=False)
-
+        
         return conv_lbbox, conv_mbbox, conv_sbbox
+
+    def post_pro(self, predictions, num_classes, anchors, img_size):
+
+        num_anchors = len(anchors)
+
+        shape = predictions .get_shape().as_list()
+        grid_size = _get_size(shape, "NHWC")
+        dim = grid_size[0] * grid_size[1]
+        bbox_attrs = 5 + num_classes
+        print(shape, anchors[0]) 
+        
+        predictions = tf.reshape(predictions, [-1, num_anchors * dim, bbox_attrs])
+
+        stride = (img_size[0] // grid_size[0], img_size[1] // grid_size[1])
+
+        anchors = [(a[0] / stride[0], a[1] / stride[1]) for a in anchors]
+
+        box_centers, box_sizes, confidence, classes = tf.split(
+            predictions, [2, 2, 1, num_classes], axis=-1)
+
+        box_centers = tf.nn.sigmoid(box_centers)
+        confidence = tf.nn.sigmoid(confidence)
+
+        grid_x = tf.range(grid_size[0], dtype=tf.float32)
+        grid_y = tf.range(grid_size[1], dtype=tf.float32)
+        a, b = tf.meshgrid(grid_x, grid_y)
+
+        x_offset = tf.reshape(a, (-1, 1))
+        y_offset = tf.reshape(b, (-1, 1))
+
+        x_y_offset = tf.concat([x_offset, y_offset], axis=-1)
+        x_y_offset = tf.reshape(tf.tile(x_y_offset, [1, num_anchors]), [1, -1, 2])
+
+        box_centers = box_centers + x_y_offset
+        box_centers = box_centers * stride
+
+        anchors = tf.tile(anchors, [dim, 1])
+        box_sizes = tf.exp(box_sizes) * anchors
+        box_sizes = box_sizes * stride
+
+        detections = tf.concat([box_centers, box_sizes, confidence], axis=-1)
+
+        classes = tf.nn.sigmoid(classes)
+        predictions = tf.concat([detections, classes], axis=-1)
+        return predictions
+
 
     def decode(self, conv_output, anchors, stride):
         """
@@ -101,6 +164,7 @@ class YOLOV3(object):
                contains (x, y, w, h, score, probability)
         """
 
+        print("anchors", anchors)
         conv_shape       = tf.shape(conv_output)
         batch_size       = conv_shape[0]
         output_size      = conv_shape[1]
